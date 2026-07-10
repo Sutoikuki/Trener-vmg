@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#F7F6F1">
+<title>Regatta by Stawicki — Sonda GPS</title>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="%230E62C4"/><path d="M9 5v22" stroke="white" stroke-width="2.5" stroke-linecap="round"/><path d="M11 6l14 5-14 5z" fill="white"/></svg>'>
+<style>
+:root{
+  --bg:#F7F6F1; --ink:#10151B; --dim:#5C6670; --line:#D8D5CC;
+  --ok:#0B8F4D; --warn:#E07B12; --alarm:#C6342B; --accent:#0E62C4;
+  --card:#FFFFFF;
+}
+.night{
+  --bg:#000; --ink:#E0392E; --dim:#7A2620; --line:#3A1512;
+  --ok:#E0392E; --warn:#E0392E; --alarm:#E0392E; --accent:#E0392E;
+  --card:#0A0505;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:-apple-system,'Roboto','Segoe UI',system-ui,sans-serif;
+  display:flex; flex-direction:column; user-select:none; overflow:hidden;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+body.alarmFlash{animation:flash 1s steps(2) infinite}
+@keyframes flash{0%{background:var(--bg)}50%{background:#F3C1BC}}
+.night.alarmFlash{animation:none}
+.lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.num{font-variant-numeric:tabular-nums;font-weight:800;letter-spacing:-.02em}
+
+#brand{display:flex;align-items:center;gap:8px;padding:10px 14px 0;font-size:12.5px;letter-spacing:.08em;color:var(--dim)}
+#brand b{color:var(--ink);letter-spacing:.14em}
+#bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+#gpsDot{width:10px;height:10px;border-radius:50%;background:var(--alarm);flex:none}
+#gpsDot.ok{background:var(--ok)}
+#srcTxt{font-size:12px;color:var(--dim);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icoBtn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:7px 12px;font-size:15px;line-height:1}
+.icoBtn.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+#main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px}
+#depthLbl{margin-bottom:2px}
+#depth{font-size:min(34vw,150px);line-height:1}
+#depth.ok{color:var(--ink)} #depth.warn{color:var(--warn)} #depth.bad{color:var(--alarm)}
+#trend{font-size:26px;font-weight:800;color:var(--dim);height:30px}
+#ukRow{display:flex;align-items:baseline;gap:8px;margin-top:6px}
+#underKeel{font-size:44px}
+#underKeel.ok{color:var(--ok)} #underKeel.warn{color:var(--warn)} #underKeel.bad{color:var(--alarm)}
+#stateTxt{font-size:14px;color:var(--dim);margin-top:6px;min-height:20px;text-align:center;padding:0 16px}
+
+#dataRow{display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+#dataRow>div{padding:10px 6px;text-align:center}
+#dataRow>div+div{border-left:1px solid var(--line)}
+#dataRow .num{font-size:24px}
+#dataRow .unit{font-size:11px;color:var(--dim);font-weight:600}
+
+#ctrl{padding:12px 14px 16px;display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:10px;align-items:center}
+.row .lbl{flex:1}
+.stepBtn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;font-size:18px;font-weight:700;padding:10px 0;width:56px}
+.stepBtn:active{background:var(--line)}
+#draftVal,#marginVal{font-size:17px;font-weight:800;width:74px;text-align:center;font-variant-numeric:tabular-nums}
+#mainRow{display:flex;gap:10px}
+#startBtn{flex:1;border:none;border-radius:14px;padding:18px 0;font-size:20px;font-weight:800;letter-spacing:.06em;background:var(--ok);color:#fff}
+#startBtn.stop{background:var(--alarm)}
+select{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:0 10px;font-size:15px;font-weight:600;width:104px}
+#toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:20px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;max-width:88vw;text-align:center}
+#toast.show{opacity:.94}
+#disc{font-size:10.5px;color:var(--dim);text-align:center;padding:0 14px 8px;line-height:1.35}
+</style>
+</head>
+<body>
+
+<div id="brand">
+  <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+    <rect width="32" height="32" rx="6" fill="var(--accent)"/>
+    <path d="M9 5v22" stroke="var(--bg)" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M11 6l14 5-14 5z" fill="var(--bg)"/>
+  </svg>
+  <span><b>REGATTA</b> by Stawicki · Sonda GPS</span>
+</div>
+
+<div id="bar">
+  <div id="gpsDot"></div>
+  <div id="srcTxt">GPS wyłączony · dane: EMODnet</div>
+  <button class="icoBtn" id="muteBtn">🔊</button>
+  <button class="icoBtn" id="nightBtn">🌙</button>
+</div>
+
+<div id="main">
+  <div class="lbl" id="depthLbl">Głębokość · metry</div>
+  <div id="depth" class="num ok">-.-</div>
+  <div id="trend"> </div>
+  <div id="ukRow">
+    <span class="lbl">pod kilem:</span>
+    <span id="underKeel" class="num ok">-.-</span>
+    <span class="lbl">m</span>
+  </div>
+  <div id="stateTxt">Naciśnij START</div>
+</div>
+
+<div id="dataRow">
+  <div><div class="lbl">Prędkość</div><div class="num" id="sog">-.-</div><div class="unit">kn</div></div>
+  <div><div class="lbl">Pozycja</div><div class="num" id="pos" style="font-size:15px;padding-top:6px">---</div><div class="unit">lat/lon</div></div>
+  <div><div class="lbl">Pomiar</div><div class="num" id="age">--</div><div class="unit">s temu</div></div>
+</div>
+
+<div id="ctrl">
+  <div class="row">
+    <span class="lbl">Zanurzenie</span>
+    <button class="stepBtn" id="draftM">−</button>
+    <span id="draftVal" class="num">1,40 m</span>
+    <button class="stepBtn" id="draftP">＋</button>
+  </div>
+  <div class="row">
+    <span class="lbl">Alarm gdy pod kilem <</span>
+    <button class="stepBtn" id="marginM">−</button>
+    <span id="marginVal" class="num">0,50 m</span>
+    <button class="stepBtn" id="marginP">＋</button>
+  </div>
+  <div id="mainRow">
+    <button id="startBtn">START</button>
+    <select id="sayEvery">
+      <option value="0">bez gadania</option>
+      <option value="30" selected>mów 30 s</option>
+      <option value="60">mów 60 s</option>
+    </select>
+  </div>
+</div>
+
+<div id="disc">Regatta by Stawicki · Dane: EMODnet DTM 2024 (najnowsze wydanie, siatka ~115 m, głębokości wzgl. LAT). Wyłącznie orientacyjne — nie do nawigacji. Rzeczywista głębokość zależy od stanu wody.</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const KN=1.943844;
+const plNum=(v,d=1)=>v.toFixed(d).replace('.',',');
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');
+  clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove('show'),2600);}
+function distM(a,b){ // haversine, meters
+  const R=6371000,r=Math.PI/180;
+  const dLa=(b.lat-a.lat)*r,dLo=(b.lon-a.lon)*r;
+  const s=Math.sin(dLa/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLo/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));
+}
+
+const S={
+  running:false,muted:false,watchId:null,wakeLock:null,
+  fix:null,                 // {lat,lon,sogKn,t}
+  draft:1.40,margin:0.50,
+  depth:null,               // meters, positive down
+  depthAt:null,             // {lat,lon,t}
+  hist:[],                  // {t,depth}
+  fetching:false,fails:0,
+  lastSay:0,lastAlarm:0,alarmOn:false,
+  cache:[],                 // [{lat,lon,depth}]
+};
+
+/* ---------- speech ---------- */
+function speak(txt,prio){
+  if(S.muted)return;
+  try{
+    if(prio)speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(txt);
+    u.lang='pl-PL';u.rate=1.02;
+    const v=speechSynthesis.getVoices().find(v=>v.lang&&v.lang.startsWith('pl'));
+    if(v)u.voice=v;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+if('speechSynthesis'in window)speechSynthesis.getVoices();
+
+/* ---------- depth fetch (EMODnet) ---------- */
+async function fetchDepth(lat,lon){
+  // cache: reuse anything within 25 m
+  const hit=S.cache.find(c=>distM(c,{lat,lon})<25);
+  if(hit){applyDepth(hit.depth,lat,lon);return;}
+  if(S.fetching)return;
+  S.fetching=true;
+  try{
+    let depth=null;
+    try{
+      // primary: EMODnet REST (DTM 2024, LAT, positive = depth)
+      const r=await fetch(`https://rest.emodnet-bathymetry.eu/depth_sample?geom=POINT(${lon.toFixed(5)}%20${lat.toFixed(5)})`);
+      if(!r.ok)throw new Error('http '+r.status);
+      const j=await r.json();
+      const v=(j&&typeof j.avg==='number')?j.avg:null;
+      if(v===null)throw new Error('brak wartości');
+      depth=v;
+    }catch(e1){
+      // fallback: EMODnet WMS GetFeatureInfo (elevation, negative = depth)
+      const d=0.001;
+      const url='https://ows.emodnet-bathymetry.eu/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo'
+        +'&LAYERS=emodnet:mean&QUERY_LAYERS=emodnet:mean&STYLES=&SRS=EPSG:4326'
+        +`&BBOX=${(lon-d).toFixed(5)},${(lat-d).toFixed(5)},${(lon+d).toFixed(5)},${(lat+d).toFixed(5)}`
+        +'&WIDTH=3&HEIGHT=3&X=1&Y=1&INFO_FORMAT=application/json';
+      const r2=await fetch(url);
+      if(!r2.ok)throw e1;
+      const j2=await r2.json();
+      const p=j2&&j2.features&&j2.features[0]&&j2.features[0].properties;
+      const v2=p?Object.values(p).find(x=>typeof x==='number'):null;
+      if(v2===undefined||v2===null)throw e1;
+      depth=Math.abs(v2);
+    }
+    if(depth<=0){ // land or above datum
+      S.fails=0;
+      $('stateTxt').textContent='Brak głębokości w tym punkcie (ląd?)';
+    }else{
+      S.cache.push({lat,lon,depth});
+      if(S.cache.length>400)S.cache.shift();
+      S.fails=0;
+      applyDepth(depth,lat,lon);
+    }
+  }catch(e){
+    S.fails++;
+    $('stateTxt').textContent=S.fails>2?'Brak danych głębokości (zasięg? poza pokryciem?)':'Pobieram głębokość...';
+  }finally{S.fetching=false;}
+}
+function applyDepth(depth,lat,lon){
+  S.depth=depth;S.depthAt={lat,lon,t:Date.now()};
+  S.hist.push({t:Date.now(),depth});
+  S.hist=S.hist.filter(h=>Date.now()-h.t<120000);
+  render();checkAlarm();
+}
+
+/* ---------- GPS ---------- */
+function onFix(p){
+  const c=p.coords;
+  S.fix={lat:c.latitude,lon:c.longitude,sogKn:(c.speed||0)*KN,t:Date.now()};
+  $('gpsDot').classList.add('ok');
+  // query if first, moved >40 m from last sample, or sample older than 30 s
+  if(!S.depthAt||distM(S.fix,S.depthAt)>40||Date.now()-S.depthAt.t>30000){
+    fetchDepth(S.fix.lat,S.fix.lon);
+  }
+  render();
+}
+function onErr(e){$('gpsDot').classList.remove('ok');toast('GPS: '+(e.message||'brak sygnału'));}
+
+/* ---------- render ---------- */
+function cls(uk){return uk<S.margin?'bad':(uk<S.margin+0.5?'warn':'ok');}
+function render(){
+  const f=S.fix;
+  $('sog').textContent=f?plNum(f.sogKn):'-.-';
+  $('pos').textContent=f?`${f.lat.toFixed(4)}\n${f.lon.toFixed(4)}`:'---';
+  $('age').textContent=S.depthAt?Math.round((Date.now()-S.depthAt.t)/1000):'--';
+  if(S.depth===null){$('depth').textContent='-.-';$('underKeel').textContent='-.-';return;}
+  const uk=S.depth-S.draft;
+  $('depth').textContent=plNum(S.depth);
+  $('underKeel').textContent=plNum(Math.max(uk,-9.9));
+  const c=cls(uk);
+  $('depth').className='num '+c;
+  $('underKeel').className='num '+c;
+  // trend from history
+  const old=S.hist.find(h=>Date.now()-h.t>40000);
+  if(old){
+    const d=S.depth-old.depth;
+    $('trend').textContent=d>0.3?'▲ głębiej':(d<-0.3?'▼ płycej':'— stabilnie');
+  } else $('trend').textContent=' ';
+  if(c==='ok')$('stateTxt').textContent='OK';
+  else if(c==='warn')$('stateTxt').textContent='Uwaga — robi się płytko';
+  else $('stateTxt').textContent='PŁYTKO!';
+}
+setInterval(()=>{if(S.running)render();speechTick();},1000);
+
+/* ---------- alarm & speech ---------- */
+function checkAlarm(){
+  if(S.depth===null)return;
+  const uk=S.depth-S.draft;
+  if(uk<S.margin){
+    document.body.classList.add('alarmFlash');
+    if(Date.now()-S.lastAlarm>10000){
+      S.lastAlarm=Date.now();
+      if(navigator.vibrate)navigator.vibrate([300,150,300]);
+      speak(`Uwaga! Płytko! ${plNum(Math.max(uk,0))} metra pod kilem.`,true);
+    }
+  }else{
+    document.body.classList.remove('alarmFlash');
+  }
+}
+function speechTick(){
+  if(!S.running||S.depth===null)return;
+  const every=parseInt($('sayEvery').value,10);
+  if(every>0&&Date.now()-S.lastSay>=every*1000){
+    S.lastSay=Date.now();
+    const uk=S.depth-S.draft;
+    if(uk>=S.margin) speak(`Głębokość ${plNum(S.depth)} metra.`);
+  }
+}
+
+/* ---------- controls ---------- */
+function fmtDraft(){$('draftVal').textContent=plNum(S.draft,2)+' m';}
+function fmtMargin(){$('marginVal').textContent=plNum(S.margin,2)+' m';}
+$('draftM').onclick=()=>{S.draft=Math.max(0.2,S.draft-0.1);fmtDraft();render();checkAlarm();};
+$('draftP').onclick=()=>{S.draft=Math.min(4,S.draft+0.1);fmtDraft();render();checkAlarm();};
+$('marginM').onclick=()=>{S.margin=Math.max(0.1,S.margin-0.1);fmtMargin();render();checkAlarm();};
+$('marginP').onclick=()=>{S.margin=Math.min(2,S.margin+0.1);fmtMargin();render();checkAlarm();};
+fmtDraft();fmtMargin();
+
+$('startBtn').onclick=async()=>{
+  if(!S.running){
+    if(!('geolocation'in navigator)){toast('Brak GPS w przeglądarce');return;}
+    S.running=true;
+    $('startBtn').textContent='STOP';$('startBtn').classList.add('stop');
+    $('stateTxt').textContent='Czekam na GPS...';
+    S.watchId=navigator.geolocation.watchPosition(onFix,onErr,{enableHighAccuracy:true,maximumAge:0,timeout:15000});
+    try{S.wakeLock=await navigator.wakeLock.request('screen');}catch(e){}
+    speak('Start sondy.',true);
+  }else{
+    S.running=false;
+    $('startBtn').textContent='START';$('startBtn').classList.remove('stop');
+    if(S.watchId!==null)navigator.geolocation.clearWatch(S.watchId);
+    try{S.wakeLock&&S.wakeLock.release();}catch(e){}
+    document.body.classList.remove('alarmFlash');
+    speechSynthesis.cancel();
+    $('gpsDot').classList.remove('ok');
+    $('stateTxt').textContent='Zatrzymano';
+  }
+};
+document.addEventListener('visibilitychange',async()=>{
+  if(document.visibilityState==='visible'&&S.running){
+    try{S.wakeLock=await navigator.wakeLock.request('screen');}catch(e){}
+  }
+});
+$('muteBtn').onclick=()=>{S.muted=!S.muted;$('muteBtn').textContent=S.muted?'🔇':'🔊';
+  $('muteBtn').classList.toggle('on',S.muted);if(S.muted)speechSynthesis.cancel();};
+$('nightBtn').onclick=()=>{document.body.classList.toggle('night');$('nightBtn').classList.toggle('on');};
+</script>
+</body>
+</html>

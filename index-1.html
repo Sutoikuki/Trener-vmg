@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#F7F6F1">
+<title>Regatta by Stawicki — Trener VMG</title>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="%230E62C4"/><path d="M9 5v22" stroke="white" stroke-width="2.5" stroke-linecap="round"/><path d="M11 6l14 5-14 5z" fill="white"/></svg>'>
+<style>
+:root{
+  --bg:#F7F6F1; --ink:#10151B; --dim:#5C6670; --line:#D8D5CC;
+  --stb:#0B8F4D; --port:#C6342B; --accent:#0E62C4; --warn:#B7791F;
+  --card:#FFFFFF;
+  --cBajdS:#0B8F4D; --cBajdP:#C6342B; --cPol:#E07B12; --cBak:#8A3FB5; --cFor:#0E62C4;
+}
+.night{
+  --bg:#000000; --ink:#E0392E; --dim:#7A2620; --line:#3A1512;
+  --stb:#E0392E; --port:#E0392E; --accent:#E0392E; --warn:#E0392E;
+  --card:#0A0505;
+  --cBajdS:#E0392E; --cBajdP:#E0392E; --cPol:#E0392E; --cBak:#E0392E; --cFor:#E0392E;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:-apple-system,'Roboto','Segoe UI',system-ui,sans-serif;
+  display:flex; flex-direction:column; user-select:none; overflow:hidden;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.lbl{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); font-weight:600}
+.num{font-variant-numeric:tabular-nums; font-weight:800; letter-spacing:-.02em}
+
+/* status bar */
+#bar{display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line)}
+#gpsDot{width:10px;height:10px;border-radius:50%;background:var(--port);flex:none}
+#gpsDot.ok{background:var(--stb)}
+#srcTxt{font-size:12px;color:var(--dim);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icoBtn{border:1px solid var(--line); background:var(--card); color:var(--ink);
+  border-radius:10px; padding:7px 12px; font-size:15px; line-height:1}
+.icoBtn.on{background:var(--ink); color:var(--bg); border-color:var(--ink)}
+#brand{display:flex;align-items:center;gap:8px;padding:10px 14px 0;font-size:12.5px;letter-spacing:.08em;color:var(--dim)}
+#brand b{color:var(--ink);letter-spacing:.14em}
+
+/* ring */
+#ringWrap{display:flex; justify-content:center; padding:6px 0 0}
+#ring{width:min(62vw,300px); height:min(62vw,300px)}
+.seg{fill:var(--line)}
+.seg.sBajdS{fill:var(--cBajdS);opacity:.30}
+.seg.sBajdP{fill:var(--cBajdP);opacity:.30}
+.seg.sPol {fill:var(--cPol); opacity:.30}
+.seg.sBak {fill:var(--cBak); opacity:.30}
+.seg.sFor {fill:var(--cFor); opacity:.30}
+.seg.stb{fill:var(--stb);opacity:1} .seg.port{fill:var(--port);opacity:1}
+.lay{stroke:var(--dim); stroke-width:1; stroke-dasharray:3 4; opacity:.6}
+.posLbl{font-size:7.5px; font-weight:600; letter-spacing:.06em; text-anchor:middle; text-transform:uppercase; opacity:.8}
+.posLbl.lBajdS{fill:var(--cBajdS)} .posLbl.lBajdP{fill:var(--cBajdP)}
+.posLbl.lPol{fill:var(--cPol)}
+.posLbl.lBak{fill:var(--cBak)}  .posLbl.lFor{fill:var(--cFor)}
+.posLbl.hot{font-weight:800; opacity:1; font-size:8.5px}
+#boat{fill:none; stroke:var(--ink); stroke-width:2.4; stroke-linejoin:round}
+#windArrow{fill:var(--accent)}
+#twaTxt{font-size:30px; font-weight:800; fill:var(--ink); font-variant-numeric:tabular-nums}
+#twaSide{font-size:11px; fill:var(--dim); letter-spacing:.12em; text-transform:uppercase}
+
+/* VMG */
+#vmgBlock{text-align:center; padding:2px 0 6px}
+#vmgRow{display:flex; align-items:baseline; justify-content:center; gap:10px}
+#vmg{font-size:min(26vw,120px); line-height:1}
+#trend{font-size:34px; font-weight:800; width:40px; text-align:left}
+#trend.up{color:var(--stb)} #trend.dn{color:var(--port)}
+#vmgSub{font-size:13px; color:var(--dim); margin-top:2px}
+#bestTxt{font-size:12px; color:var(--dim); margin-top:2px}
+
+/* data row */
+#dataRow{display:grid; grid-template-columns:1fr 1fr 1fr; border-top:1px solid var(--line); border-bottom:1px solid var(--line)}
+#dataRow>div{padding:10px 6px; text-align:center}
+#dataRow>div+div{border-left:1px solid var(--line)}
+#dataRow .num{font-size:28px}
+#dataRow .unit{font-size:12px; color:var(--dim); font-weight:600}
+
+/* controls */
+#ctrl{margin-top:auto; padding:12px 14px 16px; display:flex; flex-direction:column; gap:10px}
+#nudgeRow{display:flex; gap:10px; align-items:center}
+#nudgeRow .lbl{flex:1}
+.nBtn{border:1px solid var(--line); background:var(--card); color:var(--ink);
+  border-radius:12px; font-size:18px; font-weight:700; padding:12px 0; width:74px}
+.nBtn:active{background:var(--line)}
+#mainRow{display:flex; gap:10px}
+#startBtn{flex:1; border:none; border-radius:14px; padding:18px 0; font-size:20px; font-weight:800;
+  letter-spacing:.06em; background:var(--stb); color:#fff}
+#startBtn.stop{background:var(--port)}
+select{border:1px solid var(--line); background:var(--card); color:var(--ink);
+  border-radius:12px; padding:0 10px; font-size:15px; font-weight:600; width:104px}
+#toast{position:fixed; left:50%; bottom:96px; transform:translateX(-50%);
+  background:var(--ink); color:var(--bg); padding:9px 16px; border-radius:20px;
+  font-size:14px; opacity:0; transition:opacity .25s; pointer-events:none; max-width:88vw; text-align:center}
+#toast.show{opacity:.94}
+@media (prefers-reduced-motion:no-preference){ .seg{transition:fill .15s} }
+</style>
+</head>
+<body>
+
+<div id="brand">
+  <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+    <rect width="32" height="32" rx="6" fill="var(--accent)"/>
+    <path d="M9 5v22" stroke="var(--bg)" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M11 6l14 5-14 5z" fill="var(--bg)"/>
+  </svg>
+  <span><b>REGATTA</b> by Stawicki · Trener VMG</span>
+</div>
+
+<div id="bar">
+  <div id="gpsDot"></div>
+  <div id="srcTxt">GPS wyłączony · wiatr: brak danych</div>
+  <button class="icoBtn" id="muteBtn" title="Wycisz">🔊</button>
+  <button class="icoBtn" id="nightBtn" title="Tryb nocny">🌙</button>
+</div>
+
+<div id="ringWrap">
+  <svg id="ring" viewBox="0 0 200 200" aria-label="Kąt wiatru">
+    <g id="segs"></g>
+    <line class="lay" x1="100" y1="100" x2="100" y2="18" transform="rotate(-45 100 100)"/>
+    <line class="lay" x1="100" y1="100" x2="100" y2="18" transform="rotate(45 100 100)"/>
+    <g id="posLabels">
+      <text class="posLbl lBajdS" x="146" y="47">bajdewind</text>
+      <text class="posLbl lBajdP" x="54"  y="47">bajdewind</text>
+      <text class="posLbl lPol"  x="172" y="103">półwiatr</text>
+      <text class="posLbl lPol"  x="28"  y="103">półwiatr</text>
+      <text class="posLbl lBak"  x="146" y="157">baksztag</text>
+      <text class="posLbl lBak"  x="54"  y="157">baksztag</text>
+      <text class="posLbl lFor"  x="100" y="179">fordewind</text>
+    </g>
+    <path id="boat" d="M100 62 C110 78 112 106 108 132 L92 132 C88 106 90 78 100 62 Z"/>
+    <g id="windArrow" style="visibility:hidden">
+      <path d="M100 8 L108 26 L100 21 L92 26 Z"/>
+    </g>
+    <text id="twaTxt" x="100" y="106" text-anchor="middle">--</text>
+    <text id="twaSide" x="100" y="122" text-anchor="middle"></text>
+  </svg>
+</div>
+
+<div id="vmgBlock">
+  <div class="lbl" id="vmgLbl">VMG pod wiatr · węzły</div>
+  <div id="vmgRow"><div id="vmg" class="num">-.-</div><div id="trend"> </div></div>
+  <div id="bestTxt">najlepsze na halsie: --</div>
+</div>
+
+<div id="dataRow">
+  <div><div class="lbl">Prędkość</div><div class="num" id="sog">-.-</div><div class="unit">kn</div></div>
+  <div><div class="lbl">Kurs</div><div class="num" id="cog">---</div><div class="unit">°</div></div>
+  <div><div class="lbl">Wiatr z</div><div class="num" id="twd">---</div><div class="unit">°</div></div>
+</div>
+
+<div id="ctrl">
+  <div id="nudgeRow">
+    <span class="lbl">Korekta wiatru</span>
+    <button class="nBtn" id="nudgeL">−5°</button>
+    <button class="nBtn" id="nudgeR">+5°</button>
+  </div>
+  <div id="mainRow">
+    <button id="startBtn">START</button>
+    <select id="sayEvery" title="Co ile mówić">
+      <option value="15">mów 15 s</option>
+      <option value="20" selected>mów 20 s</option>
+      <option value="30">mów 30 s</option>
+      <option value="0">tylko zmiany</option>
+    </select>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ---------- utils ---------- */
+const $=id=>document.getElementById(id);
+const norm=d=>((d%360)+360)%360;
+const angDiff=(a,b)=>{let d=norm(a-b); return d>180? d-360 : d;}; // a-b in (-180,180]
+const KN=1.943844;
+function circMean(arr){ // array of deg
+  let x=0,y=0; for(const d of arr){x+=Math.cos(d*Math.PI/180); y+=Math.sin(d*Math.PI/180);}
+  if(x===0&&y===0) return null;
+  return norm(Math.atan2(y,x)*180/Math.PI);
+}
+function plNum(v,dec=1){ return v.toFixed(dec).replace('.',','); }
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
+
+/* ---------- state ---------- */
+const S={
+  running:false, muted:false,
+  watchId:null, wakeLock:null,
+  lastFix:null,           // {t,lat,lon,sogKn,cog}
+  courseBuf:[],           // {t,cog} raw, speed-gated
+  smooth:null, prevSmooth:null,
+  stable:null,            // stable course for tack detection {cog,since}
+  tackPending:null,
+  windDir:null,           // TWD estimate (deg FROM)
+  windSrc:'brak danych',
+  apiTimer:null,
+  vmgBuf:[],              // {t,vmg}
+  bestVmg:0, tackId:0,
+  lastPeriodic:0, lastEvent:0, lastShiftAnnounceWind:null,
+  mode:'up',              // 'up' beating / 'dn' running
+};
+
+/* ---------- ring (60 segments, Clipper style) ---------- */
+(function buildRing(){
+  const g=$('segs'); const R1=86,R2=97,C=100;
+  const secClass=(a,stbSide)=>{ // a = abs angle from bow 0-180, stbSide = right half
+    if(a<27) return ''; if(a<=60) return stbSide?'sBajdS':'sBajdP';
+    if(a<=110) return 'sPol'; if(a<=160) return 'sBak'; return 'sFor';
+  };
+  for(let i=0;i<60;i++){
+    const a=(i*6-90)*Math.PI/180, w=2.2*Math.PI/180;
+    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    const x1=C+R1*Math.cos(a-w), y1=C+R1*Math.sin(a-w);
+    const x2=C+R2*Math.cos(a-w), y2=C+R2*Math.sin(a-w);
+    const x3=C+R2*Math.cos(a+w), y3=C+R2*Math.sin(a+w);
+    const x4=C+R1*Math.cos(a+w), y4=C+R1*Math.sin(a+w);
+    p.setAttribute('d',`M${x1} ${y1} L${x2} ${y2} L${x3} ${y3} L${x4} ${y4} Z`);
+    const absA=Math.min(i*6,360-i*6);
+    p.dataset.sec=secClass(absA, i<=30);
+    p.setAttribute('class',('seg '+p.dataset.sec).trim());
+    p.dataset.i=i;
+    g.appendChild(p);
+  }
+})();
+function sectorName(absTwa){
+  if(absTwa<27)  return 'za ostro';
+  if(absTwa<=60) return 'bajdewind';
+  if(absTwa<=110)return 'półwiatr';
+  if(absTwa<=160)return 'baksztag';
+  return 'fordewind';
+}
+function drawRing(twa){ // twa in (-180,180], null clears
+  const segs=$('segs').children;
+  for(const s of segs) s.setAttribute('class',('seg '+(s.dataset.sec||'')).trim());
+  const labels=$('posLabels').children;
+  for(const l of labels) l.classList.remove('hot');
+  const arrow=$('windArrow');
+  if(twa===null){ $('twaTxt').textContent='--'; $('twaSide').textContent='';
+    arrow.style.visibility='hidden'; return; }
+  const idx=norm(Math.round(twa/6)*6)/6 % 60;
+  const side=twa>=0?'stb':'port';
+  // light the segment + neighbours
+  for(let k=-1;k<=1;k++){ const s=segs[(idx+k+60)%60]; s.setAttribute('class','seg '+side); }
+  arrow.style.visibility='visible';
+  arrow.setAttribute('transform',`rotate(${twa} 100 100)`);
+  const abs=Math.abs(twa), sec=sectorName(abs);
+  $('twaTxt').textContent=Math.round(abs)+'°';
+  $('twaSide').textContent=`${sec} · ${twa>=0?'prawy':'lewy'} hals`;
+  // highlight the matching label (DOM order: bajd R,L / pół R,L / bak R,L / fordewind)
+  const map={'bajdewind':0,'półwiatr':2,'baksztag':4};
+  if(sec==='fordewind') labels[6].classList.add('hot');
+  else if(map[sec]!==undefined) labels[map[sec]+(twa>=0?0:1)].classList.add('hot');
+}
+
+/* ---------- speech ---------- */
+function speak(txt,priority){
+  if(S.muted) return;
+  const now=Date.now();
+  if(!priority && now-S.lastEvent<6000) return;
+  try{
+    if(priority) speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(txt);
+    u.lang='pl-PL'; u.rate=1.02;
+    const v=speechSynthesis.getVoices().find(v=>v.lang&&v.lang.startsWith('pl'));
+    if(v) u.voice=v;
+    speechSynthesis.speak(u);
+    S.lastEvent=now;
+  }catch(e){}
+}
+if('speechSynthesis' in window) speechSynthesis.getVoices();
+
+/* ---------- wind estimate ---------- */
+function setWind(dir,src,announceShift){
+  const old=S.windDir;
+  S.windDir=norm(dir); S.windSrc=src;
+  if(announceShift && old!==null){
+    const d=angDiff(S.windDir,old);
+    if(Math.abs(d)>=8){
+      speak(`Wiatr skręcił w ${d>0?'prawo':'lewo'}, ${Math.abs(Math.round(d))} stopni.`,true);
+    }
+  }
+  updateSrcTxt();
+}
+async function fetchWind(lat,lon){
+  try{
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=kn`);
+    const j=await r.json(); const c=j.current;
+    if(c && typeof c.wind_direction_10m==='number'){
+      if(S.windDir===null){
+        setWind(c.wind_direction_10m,'prognoza');
+        speak(`Wiatr z ${Math.round(c.wind_direction_10m)} stopni, około ${plNum(c.wind_speed_10m,0)} węzłów, z prognozy.`,true);
+      }else{
+        // gentle blend toward model, estimate from sailing stays in charge
+        const d=angDiff(c.wind_direction_10m,S.windDir);
+        setWind(S.windDir+0.15*d, S.windSrc);
+      }
+    }
+  }catch(e){ /* offline – jedziemy na halsach */ }
+}
+function updateSrcTxt(){
+  const g=S.lastFix? 'GPS ok' : 'GPS...';
+  const w=S.windDir===null? 'wiatr: brak' : `wiatr: ${Math.round(S.windDir)}° (${S.windSrc})`;
+  $('srcTxt').textContent=`${g} · ${w}`;
+}
+
+/* ---------- tack detection & course tracking (1 s tick) ---------- */
+function tick(){
+  if(!S.running) return;
+  const now=Date.now();
+  // smoothed course from last 6 s
+  S.courseBuf=S.courseBuf.filter(s=>now-s.t<6000);
+  const cogs=S.courseBuf.map(s=>s.cog);
+  S.prevSmooth=S.smooth;
+  S.smooth=cogs.length>=2? circMean(cogs) : null;
+
+  if(S.smooth!==null){
+    if(S.stable===null) S.stable={cog:S.smooth,since:now};
+
+    const dev=angDiff(S.smooth,S.stable.cog);
+
+    // continuous tracking: on the beat, course follows the wind
+    if(S.windDir!==null && S.prevSmooth!==null && Math.abs(dev)<25){
+      const twa=angDiff(S.smooth,S.windDir);
+      if(Math.abs(twa)>=27 && Math.abs(twa)<=60 && S.lastFix && S.lastFix.sogKn>1.5){
+        const dc=angDiff(S.smooth,S.prevSmooth);
+        if(Math.abs(dc)<15) setWind(S.windDir+0.7*dc,'halsy');
+      }
+      // slow re-anchor of stable course
+      S.stable.cog=norm(S.stable.cog+0.08*dev);
+    }
+
+    // tack: sustained big deviation from stable course
+    if(Math.abs(dev)>55){
+      if(!S.tackPending) S.tackPending={t:now, from:S.stable.cog};
+      else if(now-S.tackPending.t>5000){
+        const from=S.tackPending.from, to=S.smooth;
+        // two bisectors; pick the upwind one (both TWA magnitudes < 90)
+        let b=circMean([from,to]);
+        if(b!==null){
+          if(Math.abs(angDiff(from,b))>90) b=norm(b+180);
+          // sanity: near current estimate if we have one
+          if(S.windDir===null || Math.abs(angDiff(b,S.windDir))<=60){
+            setWind(b,'halsy',false);
+            speak(`Zwrot. Wiatr z ${Math.round(b)} stopni.`,true);
+          }else{
+            speak('Zwrot wykryty.',true);
+          }
+        }
+        S.tackId++; S.bestVmg=0; $('bestTxt').textContent='najlepsze na halsie: --';
+        S.stable={cog:to,since:now}; S.tackPending=null;
+      }
+    }else{
+      S.tackPending=null;
+    }
+  }
+
+  render();
+  scheduleSpeech(now);
+}
+setInterval(tick,1000);
+
+/* ---------- GPS ---------- */
+function onFix(pos){
+  const c=pos.coords, now=Date.now();
+  const sogKn=(c.speed||0)*KN;
+  const cog=(c.heading!==null && !isNaN(c.heading) && sogKn>0.8)? norm(c.heading) : null;
+  S.lastFix={t:now,lat:c.latitude,lon:c.longitude,sogKn,cog};
+  if(cog!==null) S.courseBuf.push({t:now,cog});
+  $('gpsDot').classList.add('ok');
+  if(!S.apiTimer){
+    fetchWind(c.latitude,c.longitude);
+    S.apiTimer=setInterval(()=>{ if(S.lastFix) fetchWind(S.lastFix.lat,S.lastFix.lon); },5*60*1000);
+  }
+  updateSrcTxt();
+}
+function onGpsErr(e){
+  $('gpsDot').classList.remove('ok');
+  toast('GPS: '+(e.message||'brak sygnału')+' — sprawdź uprawnienia lokalizacji');
+}
+
+/* ---------- VMG ---------- */
+function currentVMG(){
+  if(!S.lastFix || S.windDir===null || S.smooth===null) return null;
+  const twa=angDiff(S.smooth,S.windDir);
+  const v=S.lastFix.sogKn*Math.cos(twa*Math.PI/180); // + upwind, − downwind
+  return {twa,vmg:v};
+}
+function render(){
+  const f=S.lastFix;
+  $('sog').textContent=f? plNum(f.sogKn):'-.-';
+  $('cog').textContent=(S.smooth!==null)? String(Math.round(S.smooth)).padStart(3,'0') : '---';
+  $('twd').textContent=(S.windDir!==null)? String(Math.round(S.windDir)).padStart(3,'0') : '---';
+
+  const r=currentVMG();
+  if(!r){ $('vmg').textContent='-.-'; $('trend').textContent=' '; drawRing(null); return; }
+  drawRing(r.twa);
+
+  const sec=sectorName(Math.abs(r.twa));
+  if(S._lastSec && sec!==S._lastSec && S.lastFix.sogKn>1.5 && sec!=='za ostro') speak(sec+'.');
+  S._lastSec=sec;
+
+  const upwind=Math.abs(r.twa)<=90;
+  S.mode=upwind?'up':'dn';
+  $('vmgLbl').textContent=upwind? 'VMG pod wiatr · węzły' : 'VMG z wiatrem · węzły';
+  const shown=Math.abs(r.vmg);
+  $('vmg').textContent=plNum(shown);
+
+  const now=Date.now();
+  S.vmgBuf.push({t:now,v:shown});
+  S.vmgBuf=S.vmgBuf.filter(s=>now-s.t<30000);
+  const half=now-15000;
+  const a=S.vmgBuf.filter(s=>s.t<half).map(s=>s.v);
+  const b=S.vmgBuf.filter(s=>s.t>=half).map(s=>s.v);
+  const avg=x=>x.reduce((p,c)=>p+c,0)/x.length;
+  let tr=' ';
+  if(a.length>3&&b.length>3){
+    const d=avg(b)-avg(a);
+    if(d>0.15){tr='▲'; $('trend').className='up';}
+    else if(d<-0.15){tr='▼'; $('trend').className='dn';}
+    else {tr='—'; $('trend').className='';}
+  }
+  $('trend').textContent=tr;
+
+  if(upwind && shown>S.bestVmg && f.sogKn>1.5){
+    S.bestVmg=shown;
+    $('bestTxt').textContent='najlepsze na halsie: '+plNum(shown)+' kn';
+  }
+}
+
+/* ---------- speech scheduling ---------- */
+function scheduleSpeech(now){
+  const every=parseInt($('sayEvery').value,10);
+  const r=currentVMG(); if(!r) return;
+  const shown=Math.abs(r.vmg);
+  // trend words
+  const trEl=$('trend').textContent;
+  let tail='';
+  if(trEl==='▲') tail=', rośnie, trzymaj';
+  else if(trEl==='▼') tail=', spada';
+
+  if(every>0 && now-S.lastPeriodic>=every*1000){
+    S.lastPeriodic=now;
+    speak(`${plNum(shown)}${tail}`);
+  }else if(every===0){
+    // event-only mode: speak on trend flips
+    if(trEl==='▲'&&S._lastTr!=='▲') speak('Rośnie, trzymaj.');
+    if(trEl==='▼'&&S._lastTr!=='▼') speak('Spada.');
+    S._lastTr=trEl;
+  }
+}
+
+/* ---------- controls ---------- */
+$('startBtn').onclick=async()=>{
+  if(!S.running){
+    if(!('geolocation' in navigator)){ toast('Brak GPS w tej przeglądarce'); return; }
+    S.running=true;
+    $('startBtn').textContent='STOP'; $('startBtn').classList.add('stop');
+    S.watchId=navigator.geolocation.watchPosition(onFix,onGpsErr,
+      {enableHighAccuracy:true,maximumAge:0,timeout:15000});
+    try{ S.wakeLock=await navigator.wakeLock.request('screen'); }catch(e){}
+    speak('Start. Czekam na GPS.',true);
+    updateSrcTxt();
+  }else{
+    S.running=false;
+    $('startBtn').textContent='START'; $('startBtn').classList.remove('stop');
+    if(S.watchId!==null) navigator.geolocation.clearWatch(S.watchId);
+    if(S.apiTimer){clearInterval(S.apiTimer); S.apiTimer=null;}
+    try{ S.wakeLock&&S.wakeLock.release(); }catch(e){}
+    speechSynthesis.cancel();
+    $('gpsDot').classList.remove('ok');
+  }
+};
+document.addEventListener('visibilitychange',async()=>{
+  if(document.visibilityState==='visible'&&S.running){
+    try{ S.wakeLock=await navigator.wakeLock.request('screen'); }catch(e){}
+  }
+});
+$('muteBtn').onclick=()=>{
+  S.muted=!S.muted;
+  $('muteBtn').textContent=S.muted?'🔇':'🔊';
+  $('muteBtn').classList.toggle('on',S.muted);
+  if(S.muted) speechSynthesis.cancel();
+};
+$('nightBtn').onclick=()=>{
+  document.body.classList.toggle('night');
+  $('nightBtn').classList.toggle('on');
+};
+$('nudgeL').onclick=()=>{ if(S.windDir!==null){ setWind(S.windDir-5,'ręcznie'); toast('Wiatr: '+Math.round(S.windDir)+'°'); } else toast('Najpierw START — czekam na wiatr'); };
+$('nudgeR').onclick=()=>{ if(S.windDir!==null){ setWind(S.windDir+5,'ręcznie'); toast('Wiatr: '+Math.round(S.windDir)+'°'); } else toast('Najpierw START — czekam na wiatr'); };
+</script>
+</body>
+</html>
