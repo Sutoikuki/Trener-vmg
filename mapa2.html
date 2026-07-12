@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#F7F6F1">
+<title>Regatta by Stawicki — Mapa</title>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="%230E62C4"/><path d="M9 5v22" stroke="white" stroke-width="2.5" stroke-linecap="round"/><path d="M11 6l14 5-14 5z" fill="white"/></svg>'>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --bg:#F7F6F1; --ink:#10151B; --dim:#5C6670; --line:#D8D5CC;
+  --ok:#0B8F4D; --warn:#E07B12; --alarm:#C6342B; --accent:#0E62C4;
+  --card:#FFFFFF;
+}
+.night{
+  --bg:#000; --ink:#E0392E; --dim:#7A2620; --line:#3A1512;
+  --ok:#E0392E; --warn:#E0392E; --alarm:#E0392E; --accent:#E0392E;
+  --card:#0A0505;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:-apple-system,'Roboto','Segoe UI',system-ui,sans-serif;
+  display:flex; flex-direction:column; user-select:none; overflow:hidden;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+body.alarmFlash{animation:flash 1s steps(2) infinite}
+@keyframes flash{0%{background:var(--bg)}50%{background:#F3C1BC}}
+.night.alarmFlash{animation:none}
+.lbl{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.num{font-variant-numeric:tabular-nums;font-weight:800;letter-spacing:-.02em}
+
+#brand{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:12.5px;letter-spacing:.08em;color:var(--dim);border-bottom:1px solid var(--line)}
+#brand b{color:var(--ink);letter-spacing:.14em}
+#brand .sp{flex:1}
+.icoBtn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:6px 11px;font-size:14px;line-height:1}
+.icoBtn.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+#mapWrap{flex:1;position:relative;min-height:200px}
+#map{position:absolute;inset:0;background:#cfe0ea}
+.night #map{filter:invert(1) hue-rotate(180deg) brightness(.7)}
+#mapBtns{position:absolute;right:10px;top:10px;z-index:800;display:flex;flex-direction:column;gap:8px}
+#mapBtns .icoBtn{box-shadow:0 1px 4px rgba(0,0,0,.25)}
+#gpsDot{width:9px;height:9px;border-radius:50%;background:var(--alarm);flex:none}
+#gpsDot.ok{background:var(--ok)}
+
+/* boat marker */
+.boatIcon svg{display:block}
+.snd{font-size:12px;font-weight:800;font-variant-numeric:tabular-nums;text-align:center;
+  text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;line-height:14px;pointer-events:none}
+.night .snd{text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000}
+#routeInfo{position:absolute;left:10px;bottom:26px;z-index:800;background:var(--card);
+  border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-size:13px;
+  font-weight:700;font-variant-numeric:tabular-nums;display:none;box-shadow:0 1px 4px rgba(0,0,0,.2);max-width:70vw}
+#routeInfo.show{display:block}
+.wpLbl{font-size:11px;font-weight:800;color:#7A2FA8;white-space:nowrap;
+  text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;transform:translateY(-2px)}
+.night .wpLbl{text-shadow:0 0 3px #000,0 0 3px #000}
+
+/* instrument strip */
+#strip{display:grid;grid-template-columns:1fr 1fr 1.2fr 1fr 1fr;border-top:1px solid var(--line)}
+#strip>div{padding:8px 4px;text-align:center;border-left:1px solid var(--line)}
+#strip>div:first-child{border-left:none}
+#strip .num{font-size:22px;line-height:1.15}
+#strip .unit{font-size:10px;color:var(--dim);font-weight:600}
+#depthV.ok{color:var(--ink)} #depthV.warn{color:var(--warn)} #depthV.bad{color:var(--alarm)}
+#windCell{display:flex;flex-direction:column;align-items:center;gap:2px}
+#windRow{display:flex;align-items:center;gap:6px}
+#windArr{width:22px;height:22px;transition:transform .5s}
+#windArr path{fill:var(--accent)}
+
+#ctrl{display:flex;gap:8px;padding:10px 12px 12px;align-items:center}
+#startBtn{flex:1;border:none;border-radius:13px;padding:15px 0;font-size:18px;font-weight:800;letter-spacing:.05em;background:var(--ok);color:#fff}
+#startBtn.stop{background:var(--alarm)}
+.ctlBtn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:13px;padding:15px 14px;font-size:15px;font-weight:700}
+.ctlBtn.on{background:var(--warn);color:#fff;border-color:var(--warn)}
+
+#toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:20px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;max-width:88vw;text-align:center;z-index:2000}
+#toast.show{opacity:.94}
+
+/* anchor sheet */
+#sheet{position:fixed;left:0;right:0;bottom:-100%;background:var(--card);border-top:1px solid var(--line);border-radius:18px 18px 0 0;padding:16px 16px 22px;transition:bottom .25s;z-index:1500;box-shadow:0 -4px 20px rgba(0,0,0,.15)}
+#sheet.open{bottom:0}
+#sheet h3{font-size:15px;margin-bottom:12px;letter-spacing:.04em}
+.row{display:flex;gap:10px;align-items:center;margin-bottom:12px}
+.row .lbl{flex:1}
+.stepBtn{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:12px;font-size:18px;font-weight:700;padding:9px 0;width:52px}
+#radiusVal,#draftVal{font-size:16px;font-weight:800;width:70px;text-align:center;font-variant-numeric:tabular-nums}
+.sheetBtn{width:100%;border:none;border-radius:12px;padding:14px 0;font-size:16px;font-weight:800;margin-top:4px}
+#dropBtn{background:var(--warn);color:#fff}
+#liftBtn{background:var(--line);color:var(--ink);display:none}
+#closeSheet{position:absolute;right:12px;top:10px;border:none;background:none;font-size:20px;color:var(--dim)}
+#disc{font-size:10px;color:var(--dim);text-align:center;padding:0 12px 6px;line-height:1.3}
+.leaflet-control-attribution{font-size:9px}
+</style>
+</head>
+<body>
+
+<div id="brand">
+  <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+    <rect width="32" height="32" rx="6" fill="var(--accent)"/>
+    <path d="M9 5v22" stroke="var(--bg)" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M11 6l14 5-14 5z" fill="var(--bg)"/>
+  </svg>
+  <span><b>REGATTA</b> by Stawicki · Mapa</span>
+  <span class="sp"></span>
+  <div id="gpsDot"></div>
+  <button class="icoBtn" id="muteBtn">🔊</button>
+  <button class="icoBtn" id="nightBtn">🌙</button>
+</div>
+
+<div id="mapWrap">
+  <div id="map"></div>
+  <div id="mapBtns">
+    <button class="icoBtn on" id="followBtn" title="Śledź pozycję">🧭</button>
+    <button class="icoBtn" id="bathyBtn" title="Warstwa głębokości">🌊</button>
+    <button class="icoBtn" id="wpBtn" title="Dodaj boję/punkt">📍</button>
+    <button class="icoBtn" id="routeBtn" title="Rysuj trasę">📏</button>
+    <button class="icoBtn" id="gpxBtn" title="Zapisz ślad GPX">💾</button>
+  </div>
+  <div id="routeInfo"></div>
+</div>
+
+<div id="strip">
+  <div><div class="lbl">Głębokość</div><div class="num" id="depthV">-.-</div><div class="unit">m</div></div>
+  <div><div class="lbl">Pod kilem</div><div class="num" id="ukV">-.-</div><div class="unit">m</div></div>
+  <div id="windCell"><div class="lbl">Wiatr</div>
+    <div id="windRow">
+      <svg id="windArr" viewBox="0 0 24 24"><path d="M12 2l5 12-5-3-5 3z"/></svg>
+      <span class="num" id="windV">--</span>
+    </div>
+    <div class="unit" id="windU">kn · --°</div>
+  </div>
+  <div><div class="lbl">Prędkość</div><div class="num" id="sogV">-.-</div><div class="unit">kn</div></div>
+  <div><div class="lbl">Kurs</div><div class="num" id="cogV">---</div><div class="unit">°</div></div>
+</div>
+
+<div id="ctrl">
+  <button id="startBtn">START</button>
+  <button class="ctlBtn" id="anchorBtn">⚓ Kotwica</button>
+</div>
+<div id="disc">Regatta by Stawicki · Mapa: OSM + OpenSeaMap · Głębokość: EMODnet DTM 2024 (~115 m) · Wiatr: Open-Meteo. Dane orientacyjne — nie do nawigacji.</div>
+
+<div id="sheet">
+  <button id="closeSheet">✕</button>
+  <h3>⚓ Alarm kotwiczny</h3>
+  <div class="row">
+    <span class="lbl">Promień alarmu</span>
+    <button class="stepBtn" id="radM">−</button>
+    <span id="radiusVal" class="num">30 m</span>
+    <button class="stepBtn" id="radP">＋</button>
+  </div>
+  <div class="row">
+    <span class="lbl">Zanurzenie (pod kilem)</span>
+    <button class="stepBtn" id="draftM">−</button>
+    <span id="draftVal" class="num">1,40 m</span>
+    <button class="stepBtn" id="draftP">＋</button>
+  </div>
+  <button class="sheetBtn" id="dropBtn">Rzuć kotwicę tutaj</button>
+  <button class="sheetBtn" id="liftBtn">Podnieś kotwicę</button>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const KN=1.943844;
+const plNum=(v,d=1)=>v.toFixed(d).replace('.',',');
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');
+  clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove('show'),2600);}
+function distM(a,b){
+  const R=6371000,r=Math.PI/180;
+  const dLa=(b.lat-a.lat)*r,dLo=(b.lon-a.lon)*r;
+  const s=Math.sin(dLa/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLo/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));
+}
+
+/* ---------- persisted settings ---------- */
+const P=JSON.parse(localStorage.getItem('rs_map')||'{}');
+const S={
+  running:false,muted:false,watchId:null,wakeLock:null,follow:true,
+  fix:null,
+  draft:P.draft??1.40,radius:P.radius??30,
+  depth:null,depthAt:null,fetching:false,cache:[],
+  wind:null,windAt:0,windTimer:null,
+  anchor:P.anchor??null, lastAlarm:0,
+  track:[],lastTrackPt:null,
+};
+function persist(){localStorage.setItem('rs_map',JSON.stringify({draft:S.draft,radius:S.radius,anchor:S.anchor,wps:P.wps||[],route:P.route||[]}));}
+
+/* ---------- speech ---------- */
+function speak(t,prio){
+  if(S.muted)return;
+  try{
+    if(prio)speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(t);
+    u.lang='pl-PL';u.rate=1.02;
+    const v=speechSynthesis.getVoices().find(v=>v.lang&&v.lang.startsWith('pl'));
+    if(v)u.voice=v;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+if('speechSynthesis'in window)speechSynthesis.getVoices();
+
+/* ---------- map ---------- */
+const map=L.map('map',{zoomControl:false,attributionControl:true}).setView([53.55,14.55],10);
+L.control.zoom({position:'bottomright'}).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  {maxZoom:18,attribution:'© OpenStreetMap'}).addTo(map);
+L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
+  {maxZoom:18,attribution:'© OpenSeaMap'}).addTo(map);
+const bathyLayer=L.tileLayer.wms('https://ows.emodnet-bathymetry.eu/wms',
+  {layers:'emodnet:mean_multicolour',format:'image/png',transparent:true,opacity:.35,attribution:'EMODnet'});
+const contourLayer=L.tileLayer.wms('https://ows.emodnet-bathymetry.eu/wms',
+  {layers:'emodnet:contours',format:'image/png',transparent:true,opacity:.8});
+const sndLayer=L.layerGroup();
+let bathyOn=false;
+/* ---------- spot soundings (Navionics-style depth numbers) ---------- */
+const sndCache=[]; // {lat,lon,depth}
+let sndBusy=false, profileBroken=false;
+function sndColor(d){
+  const uk=d-S.draft;
+  return uk<0.5?'#C6342B':(uk<1.5?'#B26A00':'#0B4C8C');
+}
+function sndIcon(d){
+  return L.divIcon({className:'',iconSize:[34,14],iconAnchor:[17,7],
+    html:`<div class="snd" style="color:${sndColor(d)}">${d<10?plNum(d,1):Math.round(d)}</div>`});
+}
+async function renderSoundings(){
+  if(!bathyOn||map.getZoom()<12||sndBusy)return;
+  sndBusy=true;
+  try{
+    const b=map.getBounds().pad(-0.08);
+    const rows=4, cols=6;
+    const pts=[];
+    for(let r=0;r<rows;r++){
+      const lat=b.getSouth()+(r+0.5)*(b.getNorth()-b.getSouth())/rows;
+      const rowPts=[];
+      for(let c=0;c<cols;c++){
+        const lon=b.getWest()+(c+0.5)*(b.getEast()-b.getWest())/cols;
+        const hit=sndCache.find(s=>distM(s,{lat,lon})<80);
+        if(hit)rowPts.push({lat,lon,depth:hit.depth,cached:true});
+        else rowPts.push({lat,lon,depth:null});
+      }
+      pts.push({lat,rowPts});
+    }
+    // fetch missing depths: one depth_profile per row (efficient), fallback to samples
+    for(const row of pts){
+      const missing=row.rowPts.filter(p=>p.depth===null);
+      if(!missing.length)continue;
+      if(!profileBroken){
+        try{
+          const w=row.rowPts[0].lon, e=row.rowPts[row.rowPts.length-1].lon;
+          const r=await fetch(`https://rest.emodnet-bathymetry.eu/depth_profile?geom=LINESTRING(${w.toFixed(5)}%20${row.lat.toFixed(5)},${e.toFixed(5)}%20${row.lat.toFixed(5)})`);
+          if(!r.ok)throw 0;
+          const j=await r.json();
+          // accept: [num,...] | [{avg|depth|value},...] | {profile|samples|depths:[...]}
+          let arr=Array.isArray(j)?j:(j.profile||j.samples||j.depths||null);
+          if(!arr||!arr.length)throw 0;
+          const nums=arr.map(x=>typeof x==='number'?x:(x&&(x.avg??x.depth??x.value))).filter(x=>typeof x==='number');
+          if(!nums.length)throw 0;
+          for(const p of row.rowPts){
+            if(p.depth!==null)continue;
+            const idx=Math.min(nums.length-1,Math.round((p.lon-w)/(e-w||1)*(nums.length-1)));
+            const d=Math.abs(nums[idx]);
+            if(d>0){p.depth=d;sndCache.push({lat:p.lat,lon:p.lon,depth:d});}
+          }
+        }catch(e){profileBroken=true;}
+      }
+      if(profileBroken){
+        // sequential samples, max 3 per row to stay polite
+        for(const p of missing.slice(0,3)){
+          try{
+            const r=await fetch(`https://rest.emodnet-bathymetry.eu/depth_sample?geom=POINT(${p.lon.toFixed(5)}%20${p.lat.toFixed(5)})`);
+            if(!r.ok)continue;
+            const j=await r.json();
+            if(j&&typeof j.avg==='number'&&j.avg>0){p.depth=j.avg;sndCache.push({lat:p.lat,lon:p.lon,depth:j.avg});}
+          }catch(e){}
+        }
+      }
+    }
+    if(sndCache.length>1200)sndCache.splice(0,400);
+    // draw
+    sndLayer.clearLayers();
+    for(const row of pts)for(const p of row.rowPts){
+      if(p.depth&&p.depth>0)L.marker([p.lat,p.lon],{icon:sndIcon(p.depth),interactive:false}).addTo(sndLayer);
+    }
+  }finally{sndBusy=false;}
+}
+let sndDeb=null;
+map.on('moveend zoomend',()=>{clearTimeout(sndDeb);sndDeb=setTimeout(renderSoundings,600);});
+
+map.on('dragstart',()=>{S.follow=false;$('followBtn').classList.remove('on');});
+
+const boatIcon=L.divIcon({className:'boatIcon',iconSize:[26,26],iconAnchor:[13,13],
+  html:'<svg id="boatSvg" viewBox="0 0 26 26" width="26" height="26"><path d="M13 2 C17 8 18 15 16 23 L10 23 C8 15 9 8 13 2 Z" fill="#0E62C4" stroke="#fff" stroke-width="1.5"/></svg>'});
+let boatMarker=null,accCircle=null,trackLine=null,anchorMarker=null,anchorCircle=null;
+
+function updateBoat(){
+  const f=S.fix; if(!f)return;
+  const ll=[f.lat,f.lon];
+  if(!boatMarker){
+    boatMarker=L.marker(ll,{icon:boatIcon,rotationAngle:0}).addTo(map);
+    accCircle=L.circle(ll,{radius:f.acc||0,weight:1,color:'#0E62C4',fillOpacity:.06}).addTo(map);
+    map.setView(ll,15);
+  }else{
+    boatMarker.setLatLng(ll);
+    accCircle.setLatLng(ll);accCircle.setRadius(f.acc||0);
+  }
+  const svg=document.getElementById('boatSvg');
+  if(svg&&f.cog!==null)svg.style.transform=`rotate(${f.cog}deg)`;
+  if(S.follow)map.panTo(ll,{animate:true});
+  if(trackLine)trackLine.setLatLngs(S.track.map(p=>[p.lat,p.lon]));
+}
+function drawAnchor(){
+  if(anchorMarker){map.removeLayer(anchorMarker);anchorMarker=null;}
+  if(anchorCircle){map.removeLayer(anchorCircle);anchorCircle=null;}
+  if(!S.anchor)return;
+  anchorMarker=L.marker([S.anchor.lat,S.anchor.lon],
+    {icon:L.divIcon({className:'',iconSize:[24,24],iconAnchor:[12,12],html:'<div style="font-size:20px">⚓</div>'})}).addTo(map);
+  anchorCircle=L.circle([S.anchor.lat,S.anchor.lon],
+    {radius:S.radius,color:'#E07B12',weight:2,dashArray:'5 5',fillOpacity:.05}).addTo(map);
+}
+drawAnchor();
+
+/* ---------- waypoints (boje) & route ---------- */
+if(!Array.isArray(P.wps))P.wps=[];
+if(!Array.isArray(P.route))P.route=[];
+S.wps=P.wps; S.route=P.route;
+let mode=null; // null | 'wp' | 'route'
+let routeTarget=0;
+const wpLayer=L.layerGroup().addTo(map);
+let routeLine=null;
+function bearing(a,b){
+  const r=Math.PI/180;
+  const y=Math.sin((b.lon-a.lon)*r)*Math.cos(b.lat*r);
+  const x=Math.cos(a.lat*r)*Math.sin(b.lat*r)-Math.sin(a.lat*r)*Math.cos(b.lat*r)*Math.cos((b.lon-a.lon)*r);
+  return (Math.atan2(y,x)/r+360)%360;
+}
+window.rsDelWp=function(i){
+  S.wps.splice(i,1);persistAll();drawWps();map.closePopup();
+};
+window.rsDelRoute=function(){
+  S.route.length=0;routeTarget=0;persistAll();drawRoute();map.closePopup();
+};
+function drawWps(){
+  wpLayer.clearLayers();
+  S.wps.forEach((w,i)=>{
+    const m=L.marker([w.lat,w.lon],{icon:L.divIcon({className:'',iconSize:[60,30],iconAnchor:[10,20],
+      html:`<div style="font-size:18px;line-height:18px">🟠</div><div class="wpLbl">${w.name}</div>`})}).addTo(wpLayer);
+    m.bindPopup(`<b>${w.name}</b><br>${w.lat.toFixed(5)}, ${w.lon.toFixed(5)}<br><button onclick="rsDelWp(${i})" style="margin-top:6px;padding:6px 10px;border:none;border-radius:8px;background:#C6342B;color:#fff;font-weight:700">Usuń</button>`);
+  });
+}
+function drawRoute(){
+  if(routeLine){map.removeLayer(routeLine);routeLine=null;}
+  if(S.route.length>=1){
+    routeLine=L.polyline(S.route.map(p=>[p.lat,p.lon]),
+      {color:'#0E62C4',weight:3,dashArray:'8 6',opacity:.9}).addTo(map);
+    routeLine.bindPopup('<b>Trasa</b><br><button onclick="rsDelRoute()" style="margin-top:6px;padding:6px 10px;border:none;border-radius:8px;background:#C6342B;color:#fff;font-weight:700">Usuń trasę</button>');
+  }
+  updateRouteInfo();
+}
+function routeTotalM(){
+  let t=0;
+  for(let i=1;i<S.route.length;i++)t+=distM(S.route[i-1],S.route[i]);
+  return t;
+}
+function updateRouteInfo(){
+  const el=$('routeInfo');
+  if(!S.route.length){el.classList.remove('show');return;}
+  let txt='Trasa: '+plNum(routeTotalM()/1852,1)+' Mm ('+S.route.length+' pkt)';
+  if(S.fix&&routeTarget<S.route.length){
+    const tgt=S.route[routeTarget];
+    txt+=`<br>→ pkt ${routeTarget+1}: ${plNum(distM(S.fix,tgt)/1852,2)} Mm · kurs ${String(Math.round(bearing(S.fix,tgt))).padStart(3,'0')}°`;
+  }
+  el.innerHTML=txt;el.classList.add('show');
+}
+function navTick(){
+  if(!S.fix||!S.route.length||routeTarget>=S.route.length)return;
+  const tgt=S.route[routeTarget];
+  if(distM(S.fix,tgt)<40){
+    routeTarget++;
+    if(routeTarget<S.route.length){
+      speak(`Punkt osiągnięty. Kurs do następnego: ${Math.round(bearing(S.fix,S.route[routeTarget]))} stopni.`,true);
+    }else{
+      speak('Koniec trasy. Jesteś na miejscu.',true);
+    }
+  }
+  updateRouteInfo();
+}
+map.on('click',e=>{
+  if(mode==='wp'){
+    const name=prompt('Nazwa punktu/boi:','Boja '+(S.wps.length+1));
+    if(name){S.wps.push({lat:e.latlng.lat,lon:e.latlng.lng,name});persistAll();drawWps();}
+  }else if(mode==='route'){
+    S.route.push({lat:e.latlng.lat,lon:e.latlng.lng});
+    persistAll();drawRoute();
+  }
+});
+$('wpBtn').onclick=()=>{
+  mode=(mode==='wp')?null:'wp';
+  $('wpBtn').classList.toggle('on',mode==='wp');
+  $('routeBtn').classList.remove('on');
+  if(mode==='wp')toast('Stuknij w mapę, żeby dodać boję/punkt');
+};
+$('routeBtn').onclick=()=>{
+  mode=(mode==='route')?null:'route';
+  $('routeBtn').classList.toggle('on',mode==='route');
+  $('wpBtn').classList.remove('on');
+  if(mode==='route')toast('Stukaj w mapę — kolejne punkty trasy. Stuknij linię, by usunąć.');
+};
+function persistAll(){P.wps=S.wps;P.route=S.route;persist();}
+drawWps();drawRoute();
+
+/* ---------- depth (EMODnet, sign fixed, with WMS fallback) ---------- */
+async function fetchDepth(lat,lon){
+  const hit=S.cache.find(c=>distM(c,{lat,lon})<25);
+  if(hit){applyDepth(hit.depth);return;}
+  if(S.fetching)return;
+  S.fetching=true;
+  try{
+    let depth=null;
+    try{
+      const r=await fetch(`https://rest.emodnet-bathymetry.eu/depth_sample?geom=POINT(${lon.toFixed(5)}%20${lat.toFixed(5)})`);
+      if(!r.ok)throw 0;
+      const j=await r.json();
+      if(!j||typeof j.avg!=='number')throw 0;
+      depth=j.avg;
+    }catch(e1){
+      const d=0.001;
+      const url='https://ows.emodnet-bathymetry.eu/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo'
+        +'&LAYERS=emodnet:mean&QUERY_LAYERS=emodnet:mean&STYLES=&SRS=EPSG:4326'
+        +`&BBOX=${(lon-d).toFixed(5)},${(lat-d).toFixed(5)},${(lon+d).toFixed(5)},${(lat+d).toFixed(5)}`
+        +'&WIDTH=3&HEIGHT=3&X=1&Y=1&INFO_FORMAT=application/json';
+      const r2=await fetch(url);if(!r2.ok)throw 0;
+      const j2=await r2.json();
+      const p=j2&&j2.features&&j2.features[0]&&j2.features[0].properties;
+      const v2=p?Object.values(p).find(x=>typeof x==='number'):null;
+      if(v2===undefined||v2===null)throw 0;
+      depth=Math.abs(v2);
+    }
+    if(depth>0){
+      S.depth=depth;S.depthAt={lat,lon,t:Date.now()};
+      S.cache.push({lat,lon,depth});
+      if(S.cache.length>400)S.cache.shift();
+    }
+  }catch(e){/* keep last */}
+  finally{S.fetching=false;render();}
+}
+function applyDepth(d){S.depth=d;S.depthAt={...S.depthAt,t:Date.now()};render();}
+
+/* ---------- wind (Open-Meteo, poll 5 min) ---------- */
+async function fetchWind(lat,lon){
+  try{
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=kn`);
+    const j=await r.json();const c=j.current;
+    if(c&&typeof c.wind_direction_10m==='number'){
+      S.wind={dir:c.wind_direction_10m,spd:c.wind_speed_10m,gust:c.wind_gusts_10m};
+      S.windAt=Date.now();render();
+    }
+  }catch(e){}
+}
+
+/* ---------- GPS ---------- */
+function onFix(p){
+  const c=p.coords;
+  S.fix={lat:c.latitude,lon:c.longitude,acc:c.accuracy||0,
+    sogKn:(c.speed||0)*KN,
+    cog:(c.heading!==null&&!isNaN(c.heading)&&(c.speed||0)*KN>0.8)?c.heading:null,
+    t:Date.now()};
+  $('gpsDot').classList.add('ok');
+  // track: add point every >10 m
+  if(!S.lastTrackPt||distM(S.fix,S.lastTrackPt)>10){
+    S.track.push({lat:S.fix.lat,lon:S.fix.lon,t:Date.now()});
+    S.lastTrackPt=S.fix;
+    if(!trackLine)trackLine=L.polyline([],{color:'#C6342B',weight:3,opacity:.8}).addTo(map);
+  }
+  if(!S.depthAt||distM(S.fix,S.depthAt)>40||Date.now()-S.depthAt.t>30000)fetchDepth(S.fix.lat,S.fix.lon);
+  if(!S.windTimer){
+    fetchWind(S.fix.lat,S.fix.lon);
+    S.windTimer=setInterval(()=>{if(S.fix)fetchWind(S.fix.lat,S.fix.lon);},5*60*1000);
+  }
+  updateBoat();checkAnchor();navTick();render();
+}
+function onErr(e){$('gpsDot').classList.remove('ok');toast('GPS: '+(e.message||'brak sygnału'));}
+
+/* ---------- anchor alarm ---------- */
+function checkAnchor(){
+  if(!S.anchor||!S.fix)return;
+  const d=distM(S.fix,S.anchor);
+  if(d>S.radius){
+    document.body.classList.add('alarmFlash');
+    if(Date.now()-S.lastAlarm>12000){
+      S.lastAlarm=Date.now();
+      if(navigator.vibrate)navigator.vibrate([400,150,400]);
+      speak(`Alarm kotwiczny! Dryfujesz, ${Math.round(d)} metrów od kotwicy.`,true);
+    }
+  }else document.body.classList.remove('alarmFlash');
+}
+
+/* ---------- render ---------- */
+function render(){
+  const f=S.fix;
+  $('sogV').textContent=f?plNum(f.sogKn):'-.-';
+  $('cogV').textContent=(f&&f.cog!==null)?String(Math.round(f.cog)).padStart(3,'0'):'---';
+  if(S.depth!==null){
+    const uk=S.depth-S.draft;
+    $('depthV').textContent=plNum(S.depth);
+    $('ukV').textContent=plNum(uk);
+    const c=uk<0.5?'bad':(uk<1?'warn':'ok');
+    $('depthV').className='num '+c;$('ukV').className='num '+c;
+  }
+  if(S.wind){
+    $('windV').textContent=plNum(S.wind.spd,0);
+    $('windU').textContent=`kn · ${Math.round(S.wind.dir)}° · porywy ${plNum(S.wind.gust||0,0)}`;
+    $('windArr').style.transform=`rotate(${S.wind.dir+180}deg)`; // arrow points where wind blows TO
+  }
+}
+
+/* ---------- controls ---------- */
+$('startBtn').onclick=async()=>{
+  if(!S.running){
+    if(!('geolocation'in navigator)){toast('Brak GPS w przeglądarce');return;}
+    S.running=true;
+    $('startBtn').textContent='STOP';$('startBtn').classList.add('stop');
+    S.watchId=navigator.geolocation.watchPosition(onFix,onErr,{enableHighAccuracy:true,maximumAge:0,timeout:15000});
+    try{S.wakeLock=await navigator.wakeLock.request('screen');}catch(e){}
+    toast('Start — czekam na GPS');
+  }else{
+    S.running=false;
+    $('startBtn').textContent='START';$('startBtn').classList.remove('stop');
+    if(S.watchId!==null)navigator.geolocation.clearWatch(S.watchId);
+    if(S.windTimer){clearInterval(S.windTimer);S.windTimer=null;}
+    try{S.wakeLock&&S.wakeLock.release();}catch(e){}
+    document.body.classList.remove('alarmFlash');
+    speechSynthesis.cancel();
+    $('gpsDot').classList.remove('ok');
+  }
+};
+document.addEventListener('visibilitychange',async()=>{
+  if(document.visibilityState==='visible'&&S.running){
+    try{S.wakeLock=await navigator.wakeLock.request('screen');}catch(e){}
+  }
+});
+$('muteBtn').onclick=()=>{S.muted=!S.muted;$('muteBtn').textContent=S.muted?'🔇':'🔊';
+  $('muteBtn').classList.toggle('on',S.muted);if(S.muted)speechSynthesis.cancel();};
+$('nightBtn').onclick=()=>{document.body.classList.toggle('night');$('nightBtn').classList.toggle('on');};
+$('followBtn').onclick=()=>{S.follow=!S.follow;$('followBtn').classList.toggle('on',S.follow);
+  if(S.follow&&S.fix)map.panTo([S.fix.lat,S.fix.lon]);};
+$('bathyBtn').onclick=()=>{
+  bathyOn=!bathyOn;
+  $('bathyBtn').classList.toggle('on',bathyOn);
+  if(bathyOn){
+    bathyLayer.addTo(map);contourLayer.addTo(map);sndLayer.addTo(map);
+    if(map.getZoom()<12)toast('Przybliż mapę, żeby zobaczyć liczby głębokości');
+    renderSoundings();
+  }else{
+    map.removeLayer(bathyLayer);map.removeLayer(contourLayer);
+    sndLayer.clearLayers();map.removeLayer(sndLayer);
+  }
+};
+
+/* GPX export */
+$('gpxBtn').onclick=()=>{
+  if(S.track.length<2&&!S.wps.length&&S.route.length<2){toast('Brak śladu, boi ani trasy do zapisania');return;}
+  let g='<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Regatta by Stawicki" xmlns="http://www.topografix.com/GPX/1/1">\n';
+  for(const w of S.wps)g+=`<wpt lat="${w.lat.toFixed(6)}" lon="${w.lon.toFixed(6)}"><name>${w.name.replace(/[<>&]/g,'')}</name></wpt>\n`;
+  if(S.route.length>=2){
+    g+='<rte><name>Trasa</name>\n';
+    for(const p of S.route)g+=`<rtept lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}"/>\n`;
+    g+='</rte>\n';
+  }
+  if(S.track.length>=2){
+    g+='<trk><name>Rejs '+new Date().toISOString().slice(0,10)+'</name><trkseg>\n';
+    for(const p of S.track)g+=`<trkpt lat="${p.lat.toFixed(6)}" lon="${p.lon.toFixed(6)}"><time>${new Date(p.t).toISOString()}</time></trkpt>\n`;
+    g+='</trkseg></trk>\n';
+  }
+  g+='</gpx>';
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([g],{type:'application/gpx+xml'}));
+  a.download='rejs-'+new Date().toISOString().slice(0,10)+'.gpx';
+  a.click();URL.revokeObjectURL(a.href);
+  toast('Zapisano GPX: ślad + boje + trasa');
+};
+
+/* anchor sheet */
+function fmtSheet(){
+  $('radiusVal').textContent=S.radius+' m';
+  $('draftVal').textContent=plNum(S.draft,2)+' m';
+  $('dropBtn').style.display=S.anchor?'none':'block';
+  $('liftBtn').style.display=S.anchor?'block':'none';
+  $('anchorBtn').classList.toggle('on',!!S.anchor);
+}
+fmtSheet();
+$('anchorBtn').onclick=()=>{$('sheet').classList.add('open');};
+$('closeSheet').onclick=()=>{$('sheet').classList.remove('open');};
+$('radM').onclick=()=>{S.radius=Math.max(10,S.radius-5);fmtSheet();drawAnchor();persist();};
+$('radP').onclick=()=>{S.radius=Math.min(200,S.radius+5);fmtSheet();drawAnchor();persist();};
+$('draftM').onclick=()=>{S.draft=Math.max(0.2,S.draft-0.1);fmtSheet();render();persist();};
+$('draftP').onclick=()=>{S.draft=Math.min(4,S.draft+0.1);fmtSheet();render();persist();};
+$('dropBtn').onclick=()=>{
+  if(!S.fix){toast('Najpierw START — czekam na GPS');return;}
+  S.anchor={lat:S.fix.lat,lon:S.fix.lon};persist();drawAnchor();fmtSheet();
+  $('sheet').classList.remove('open');
+  speak('Kotwica rzucona. Pilnuję pozycji.',true);
+};
+$('liftBtn').onclick=()=>{
+  S.anchor=null;persist();drawAnchor();fmtSheet();
+  document.body.classList.remove('alarmFlash');
+  $('sheet').classList.remove('open');
+  toast('Kotwica podniesiona');
+};
+</script>
+</body>
+</html>
