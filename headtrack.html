@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#06121c">
+<title>Regatta HeadTrack</title>
+<!-- 1) moduł MUSI być przed Three.js -->
+<script src="regatta-headtrack.js"></script>
+<!-- 2) Three.js -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:#04121f;color:#cfe6f5;font:14px/1.4 "Segoe UI",system-ui,sans-serif}
+  #scene{position:absolute;inset:0}
+  #bar{position:fixed;top:10px;left:10px;right:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;z-index:5}
+  #bar h1{font-size:15px;letter-spacing:.06em;margin-right:auto;text-shadow:0 1px 3px #000}
+  #bar h1 small{font-weight:400;color:#8fb3c9;letter-spacing:0}
+  #bar button{font:inherit;color:#d9ecf7;background:#0c1824e6;border:1px solid #23435a;border-radius:9px;padding:8px 12px;min-height:40px;cursor:pointer}
+  #bar button.act{background:#1f6f8f;border-color:#3fd8ff}
+  #gazeCv{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}
+  #help{position:fixed;right:10px;bottom:10px;max-width:300px;background:#0c1824e6;border:1px solid #23435a;border-radius:12px;padding:10px 12px;font-size:12.5px;color:#a9c7da;z-index:5}
+  #help b{color:#cfe6f5}
+  @media(max-width:600px){#help{display:none}}
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<canvas id="gazeCv"></canvas>
+<div id="bar">
+  <h1>REGATTA HEADTRACK <small>· rozglądanie się głową w kokpicie</small></h1>
+  <button id="bGaze">👁 Wzrok: wył.</button>
+  <button id="bHeat">Mapa cieplna</button>
+  <button id="bCal">Kalibruj wzrok</button>
+</div>
+<div id="help">
+  <b>1.</b> W panelu na dole kliknij <b>Start</b> i zezwól na kamerę.<br>
+  <b>2.</b> Patrz prosto — tracker sam się wyzeruje (później: <b>F8</b>).<br>
+  <b>3.</b> Obróć głowę, żeby rozejrzeć się po jachcie. Pochyl się do ekranu, żeby się przybliżyć.<br>
+  <b>F9</b> włącza/wyłącza śledzenie. Boje stoją też za rufą — spróbuj je znaleźć.
+</div>
+
+<script>
+{
+  const cv = document.getElementById('scene');
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const scene = new THREE.Scene();
+  const sky = new THREE.Color('#8fc4e6');
+  scene.background = sky;
+  scene.fog = new THREE.Fog(sky, 60, 420);
+  const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 1000);
+
+  scene.add(new THREE.HemisphereLight('#dff2ff', '#1b3b52', 0.9));
+  const sun = new THREE.DirectionalLight('#fff3dc', 1.1);
+  sun.position.set(-40, 60, -30); scene.add(sun);
+
+  // morze
+  const seaGeo = new THREE.PlaneGeometry(900, 900, 120, 120);
+  seaGeo.rotateX(-Math.PI / 2);
+  const sea = new THREE.Mesh(seaGeo, new THREE.MeshPhongMaterial({ color: '#1d5d80', shininess: 60, flatShading: true }));
+  scene.add(sea);
+  const sp = seaGeo.attributes.position, base = sp.array.slice();
+
+  // jacht (grupa porusza się po falach, kamera siedzi przy sterze)
+  const boat = new THREE.Group(); scene.add(boat);
+  const M = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 });
+  const hullShape = new THREE.Shape();
+  hullShape.moveTo(-1.6, -4); hullShape.lineTo(1.6, -4); hullShape.quadraticCurveTo(1.9, 1, 0, 5.2);
+  hullShape.quadraticCurveTo(-1.9, 1, -1.6, -4);
+  const deck = new THREE.Mesh(new THREE.ExtrudeGeometry(hullShape, { depth: 0.6, bevelEnabled: false }), M('#e9e4d8'));
+  deck.rotation.x = Math.PI / 2;   // dziób w stronę +Z boat.add(deck);
+  const pit = new THREE.Mesh(new THREE.BoxGeometry(2, 0.7, 2.6), M('#c9b48a'));
+  pit.position.set(0, -0.25, -2.4); boat.add(pit);
+  for (const s of [-1, 1]) {
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 2.4), M('#8a6a45'));
+    seat.position.set(s * 0.8, 0.15, -2.4); boat.add(seat);
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 8, 6), M('#c8d0d6'));
+    rail.rotation.x = Math.PI / 2; rail.position.set(s * 1.5, 0.6, 0.3); boat.add(rail);
+  }
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.7, 2.4), M('#f2efe8'));
+  cabin.position.set(0, 0.35, 0.3); boat.add(cabin);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 13, 10), M('#b9c2c9'));
+  mast.position.set(0, 6.5, 1.2); boat.add(mast);
+  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 4.2, 8), M('#b9c2c9'));
+  boom.rotation.x = Math.PI / 2; boom.rotation.y = 0.25; boom.position.set(-0.45, 1.6, -0.6); boat.add(boom);
+  const sailGeo = new THREE.BufferGeometry();
+  sailGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 1.65, 1.15, 0, 12.6, 1.15, -0.95, 1.65, -2.75], 3));
+  sailGeo.computeVertexNormals();
+  boat.add(new THREE.Mesh(sailGeo, new THREE.MeshStandardMaterial({ color: '#f7f5ef', side: THREE.DoubleSide, roughness: 0.9 })));
+  const jibGeo = new THREE.BufferGeometry();
+  jibGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0.2, 5.1, 0, 11, 1.25, 0.9, 0.6, 1.6], 3));
+  jibGeo.computeVertexNormals();
+  boat.add(new THREE.Mesh(jibGeo, new THREE.MeshStandardMaterial({ color: '#eef1f4', side: THREE.DoubleSide, roughness: 0.9 })));
+  const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.04, 8, 28), M('#2a2f35'));
+  wheel.position.set(0, 0.55, -3.3); boat.add(wheel);
+  const pod = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.08), M('#111'));
+  pod.position.set(0, 1.25, -3.05); pod.rotation.x = -0.3; boat.add(pod);
+
+  // boje dookoła (również za rufą)
+  const buoys = [];
+  [[0, -60], [35, -90], [-50, -40], [70, 10], [-80, 30], [20, 70], [-30, 95], [90, 80]].forEach(([x, z], i) => {
+    const b = new THREE.Group();
+    const c = new THREE.Mesh(new THREE.ConeGeometry(0.9, 2.4, 14), M(i % 2 ? '#ffb000' : '#e0402a'));
+    c.position.y = 1.2; b.add(c);
+    b.position.set(x, 0, z); scene.add(b); buoys.push(b);
+  });
+  // ląd na horyzoncie
+  for (let i = 0; i < 6; i++) {
+    const h = new THREE.Mesh(new THREE.ConeGeometry(30 + i * 7, 14 + i * 3, 6), M('#4f6b55'));
+    const a = -1.2 + i * 0.45; h.position.set(Math.sin(a) * 380, 0, -Math.cos(a) * 380); scene.add(h);
+  }
+
+  // kamera przy sterze, przypięta do jachtu
+  camera.position.set(0.7, 1.55, -3.9);
+  camera.rotation.set(0, Math.PI, 0, 'YXZ');   // patrz na dziób (+Z)
+  boat.add(camera);
+
+  const wave = (x, z, t) => Math.sin(x * 0.08 + t * 1.1) * 0.5 + Math.sin(z * 0.11 - t * 0.9) * 0.4 + Math.sin((x + z) * 0.21 + t * 1.7) * 0.15;
+
+  function resize() {
+    const w = innerWidth, h = innerHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    gaze.cv.width = w * devicePixelRatio; gaze.cv.height = h * devicePixelRatio;
+  }
+
+  // nakładka wzroku
+  const gaze = { cv: document.getElementById('gazeCv'), on: false, heat: false, trail: [] };
+  gaze.ctx = gaze.cv.getContext('2d');
+  addEventListener('resize', resize);
+  resize();
+
+  const bG = document.getElementById('bGaze'), bH = document.getElementById('bHeat');
+  bG.onclick = () => {
+    if (!RegattaHead.config.gazeW) { RegattaHead.calibrateGaze().then(r => { if (r) { gaze.on = true; sync(); } }); return; }
+    gaze.on = !gaze.on; sync();
+  };
+  bH.onclick = () => { gaze.heat = !gaze.heat; gaze.trail.length = 0; sync(); };
+  document.getElementById('bCal').onclick = () => RegattaHead.calibrateGaze().then(r => { if (r) { gaze.on = true; sync(); } });
+  function sync() {
+    bG.textContent = '👁 Wzrok: ' + (gaze.on ? 'wł.' : 'wył.'); bG.classList.toggle('act', gaze.on);
+    bH.classList.toggle('act', gaze.heat);
+  }
+
+  function drawGaze() {
+    const c = gaze.ctx, d = devicePixelRatio, g = RegattaHead.gaze;
+    c.clearRect(0, 0, gaze.cv.width, gaze.cv.height);
+    if (!gaze.on || !g.ok) return;
+    if (gaze.heat) {
+      gaze.trail.push([g.x, g.y]); if (gaze.trail.length > 900) gaze.trail.shift();
+      c.globalCompositeOperation = 'lighter';
+      for (const [x, y] of gaze.trail) {
+        const r = c.createRadialGradient(x * d, y * d, 0, x * d, y * d, 46 * d);
+        r.addColorStop(0, 'rgba(255,120,40,0.06)'); r.addColorStop(1, 'rgba(255,120,40,0)');
+        c.fillStyle = r; c.fillRect(x * d - 46 * d, y * d - 46 * d, 92 * d, 92 * d);
+      }
+      c.globalCompositeOperation = 'source-over';
+    }
+    c.beginPath(); c.arc(g.x * d, g.y * d, 18 * d, 0, 7);
+    c.strokeStyle = 'rgba(255,179,71,.95)'; c.lineWidth = 3 * d; c.stroke();
+    c.beginPath(); c.arc(g.x * d, g.y * d, 3 * d, 0, 7); c.fillStyle = '#ffb347'; c.fill();
+  }
+
+  const clock = new THREE.Clock();
+  let heading = 0;
+  function frame() {
+    const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+    for (let i = 0; i < sp.count; i++) {
+      const x = base[i * 3], z = base[i * 3 + 2];
+      sp.array[i * 3 + 1] = wave(x + boat.position.x, z + boat.position.z, t);
+    }
+    sp.needsUpdate = true; seaGeo.computeVertexNormals();
+    sea.position.x = boat.position.x; sea.position.z = boat.position.z;
+    // jacht płynie powoli, kołysze się na fali
+    heading += Math.sin(t * 0.07) * 0.0006;
+    boat.position.x += Math.sin(heading) * 2.2 * dt; boat.position.z += Math.cos(heading) * 2.2 * dt;
+    const bx = boat.position.x, bz = boat.position.z;
+    boat.position.y = wave(bx, bz, t) * 0.6 + 0.35;
+    boat.rotation.set((wave(bx, bz + 3, t) - wave(bx, bz - 3, t)) * 0.08, heading, -0.12 + (wave(bx + 1.5, bz, t) - wave(bx - 1.5, bz, t)) * 0.1, 'YXZ');
+    for (const b of buoys) { b.position.y = wave(b.position.x, b.position.z, t); b.rotation.z = Math.sin(t + b.position.x) * 0.12; }
+    renderer.render(scene, camera);   // ← tu moduł dokłada obrót i ruch głowy
+    drawGaze();
+    requestAnimationFrame(frame);
+  }
+  sync();
+  requestAnimationFrame(frame);
+}
+</script>
+</body>
+</html>
